@@ -1,0 +1,22 @@
+# Copy to ~/.config/flipscan/config.toml
+scanner = "airscan:e0:Canon YA"   # SANE device id (scanimage -L)
+dpi = 300
+page_width_mm = 210
+# Canon YA reports a max scan height of 297.011mm. TODO: check on paper that the ADF
+# copes with the full A4 length (old script used 290)
+page_height_mm = 297
+scan_format = "jpeg"              # jpeg | png | tiff
+back_rotation = 0                 # 0 | 90 | 180 | 270, applied to back sides
+sessions_dir = "~/Scans/sessions"
+
+[upload]
+backend = "scp"                   # scp | folder | paperless
+# scp:
+host = "pi"
+user = "koellman"
+path = "/home/koellman/docker/data/paperless/consume"
+# paperless (API):
+# url = "http://paperless:8000"
+# token = "..."
+# folder:
+# path = "/mnt/paperless/consume"
