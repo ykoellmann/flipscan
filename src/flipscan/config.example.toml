@@ -1,22 +1,24 @@
-# Copy to ~/.config/flipscan/config.toml
-scanner = "airscan:e0:Canon YA"   # SANE device id (scanimage -L)
+# Copy to ~/.config/flipscan/config.toml (or run `flipscan init-config`)
+scanner = "airscan:e0:Your Scanner"   # SANE device id, see `scanimage -L`
 dpi = 300
 page_width_mm = 210
-# Canon YA reports a max scan height of 297.011mm. TODO: check on paper that the ADF
-# copes with the full A4 length (old script used 290)
+# Scan height. Some ADFs jam or cut off at the full A4 length (297); if so,
+# lower it (e.g. 290). Override per run: flipscan scan --height 290
 page_height_mm = 297
 scan_format = "jpeg"              # jpeg | png | tiff
-back_rotation = 0                 # 0 | 90 | 180 | 270, applied to back sides
+# Rotation applied to back sides (0 | 90 | 180 | 270). Depends on how you flip the
+# stack; override per run: flipscan scan --back-rotation 180
+back_rotation = 0
 sessions_dir = "~/Scans/sessions"
 
 [upload]
-backend = "scp"                   # scp | folder | paperless
+backend = "folder"                # folder | scp | paperless
+# folder: copy into a (mounted) Paperless consume directory
+path = "~/paperless/consume"
 # scp:
-host = "pi"
-user = "koellman"
-path = "/home/koellman/docker/data/paperless/consume"
-# paperless (API):
+# host = "myserver"
+# user = "me"
+# path = "/srv/paperless/consume"
+# paperless API:
 # url = "http://paperless:8000"
 # token = "..."
-# folder:
-# path = "/mnt/paperless/consume"

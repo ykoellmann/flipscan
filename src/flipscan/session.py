@@ -128,12 +128,13 @@ class Session:
         self.undo_stack.append(json.dumps(self.pages))
         del self.undo_stack[:-200]
 
-    def update(self, ids: list[int], **fields) -> None:
+    def update(self, ids: list[int], rotate_by: int = 0, **fields) -> None:
         allowed = {"deleted", "cut_before", "rotation", "doc_name"}
         with self.lock:
             self._snapshot()
             for p in self.pages:
                 if p["id"] in ids:
+                    p["rotation"] = (p["rotation"] + rotate_by) % 360
                     for k, v in fields.items():
                         if k in allowed:
                             p[k] = v

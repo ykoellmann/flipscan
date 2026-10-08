@@ -57,6 +57,7 @@ document.addEventListener("keydown", async e => {
       update([first.id], {cut_before: !first.cut_before}); break; }
     case "x": update([p.id], {deleted: !p.deleted}); break;
     case "r": update([p.id], {rotation: (p.rotation + 90) % 360}); break;
+    case "R": update(S.pages.filter(q => q.side === "back").map(q => q.id), {rotate_by: 180}); break;
     case "n": {
       const name = prompt("Dokumentname (leer = Standard)", p.doc_name || "");
       if (name !== null) update([p.id], {doc_name: name}); break; }

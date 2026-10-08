@@ -131,3 +131,13 @@ def test_config(tmp_path):
     f.write_text("back_rotation = 45\n")
     with pytest.raises(SystemExit):
         config.load(f)
+
+
+def test_rotate_by(tmp_path):
+    s = Session.create(tmp_path)
+    s.add_page(make_img(tmp_path / "a.jpg"), "ADF", 1, "back", rotation=90)
+    s.add_page(make_img(tmp_path / "b.jpg"), "ADF", 2, "back", rotation=270)
+    s.update([1, 2], rotate_by=180)
+    assert [p["rotation"] for p in s.pages] == [270, 90]
+    s.undo()
+    assert [p["rotation"] for p in s.pages] == [90, 270]

@@ -33,6 +33,12 @@ def _get_session(cfg, new: bool, name: str | None = None) -> Session:
 
 def cmd_scan(cfg, args):
     from . import scan
+    if args.height:
+        cfg.page_height_mm = args.height
+    if args.back_rotation is not None:
+        cfg.back_rotation = args.back_rotation
+    if args.dpi:
+        cfg.dpi = args.dpi
     if not cfg.scanner:
         sys.exit("Kein Scanner konfiguriert (config.toml, siehe config.example.toml).")
     session = _get_session(cfg, args.new, args.session)
@@ -138,6 +144,10 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("scan", help="Chargen in eine Session scannen")
     p.add_argument("--new", action="store_true", help="neue Session beginnen")
+    p.add_argument("--height", type=int, help="Scanhoehe in mm (Config: page_height_mm)")
+    p.add_argument("--back-rotation", type=int, choices=(0, 90, 180, 270),
+                   help="Drehung der Rueckseiten (Config: back_rotation)")
+    p.add_argument("--dpi", type=int, help="Aufloesung (Config: dpi)")
     p.set_defaults(fn=cmd_scan)
     p = sub.add_parser("review", help="Review-UI starten")
     p.add_argument("--port", type=int, default=5000)

@@ -26,7 +26,8 @@ def create_app(cfg: Config, session: Session) -> Flask:
     def update():
         body = request.get_json(force=True)
         fields = {k: body[k] for k in ("deleted", "cut_before", "rotation", "doc_name") if k in body}
-        session.update([int(i) for i in body.get("ids", [])], **fields)
+        session.update([int(i) for i in body.get("ids", [])],
+                       rotate_by=int(body.get("rotate_by", 0)), **fields)
         return jsonify(state())
 
     @app.post("/api/undo")

@@ -22,7 +22,7 @@ Optional: `tesseract` (+ `deu`/`eng` data) for page-number detection.
     flipscan sessions           # list sessions;  --session NAME selects one
 
 Review keys: `←/→` navigate, `c` cut before sheet, `x` delete, `r` rotate, `u` undo,
-`n` name document, `B` delete suggested blanks, `C` accept suggested cuts, `space` zoom.
+`n` name document, `R` rotate all back sides by 180° (fixes a wrong flip direction without rescanning), `B` delete suggested blanks, `C` accept suggested cuts, `space` zoom.
 Blank pages and OCR cuts are only *suggestions*, never applied automatically.
 
 ## Configuration
@@ -32,11 +32,10 @@ scanner, dpi, page size, scan format, back-side rotation, sessions dir, and one
 `[upload]` backend: `scp`, `folder` or `paperless` (API URL + token).
 Unknown keys and invalid values are rejected at startup.
 
-## Known open points
-- Full A4 height (`page_height_mm = 297`) in the ADF is unverified on real paper
-  (the previous script used 290). Back sides may need `back_rotation = 180`.
-- Name: there are unrelated GitHub projects called FlipScan, one with a similar
-  purpose (Ica-Qin/FlipScan). Reconsider before publishing.
+Scan height and back-side rotation depend on your scanner and how you flip the stack, so
+they are adjustable at three levels: config file, per-run flags
+(`flipscan scan --height 290 --back-rotation 180 --dpi 600`), and afterwards in the
+review UI (`R`, or `r` per page) without rescanning.
 
 ## Development
     uv sync && uv run pytest
