@@ -43,7 +43,7 @@ def cmd_scan(cfg, args):
         sys.exit("Kein Scanner konfiguriert (config.toml, siehe config.example.toml).")
     session = _get_session(cfg, args.new, args.session)
     while True:
-        mode = _ask("Charge hinzufuegen: [a] ADF  [f] Flachbett  [q] Ende > ", "a")
+        mode = _ask("Vorderseiten einlegen -> [Enter] ADF scannen  [f] Flachbett  [q] Ende > ", "a")
         if mode == "q":
             break
         tmp = scan.tmpdir()
@@ -62,15 +62,13 @@ def cmd_scan(cfg, args):
                         break
                     tmp = scan.tmpdir()
                 continue
-            input("Vorderseiten einlegen, Enter... ")
             fronts = scan.scan_adf_fronts(cfg, tmp)
             print(f"  {len(fronts)} Vorderseite(n).")
             if not fronts:
                 continue
-            if _ask("Rueckseiten scannen? [Enter] ja  [n] einseitig > ") == "n":
+            if _ask("Stapel umdrehen und einlegen -> [Enter] Rueckseiten scannen  [n] einseitig > ") == "n":
                 scan.add_adf_batch(cfg, session, fronts, [])
                 continue
-            input("Stapel umdrehen, Enter... ")
             btmp = scan.tmpdir()
             while True:
                 backs = scan.scan_adf_fronts(cfg, btmp)
