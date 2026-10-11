@@ -245,3 +245,30 @@ def test_failed_upload_keeps_pdf(tmp_path):
     export_pdfs(s)
     ok, failed = upload_session(cfg, s)
     assert not ok and len(failed) == 1 and failed[0].exists() and s.status == "open"
+
+
+JAM_XML = """<?xml version="1.0" encoding="UTF-8"?><scan:ScannerStatus xmlns:scan="http://schemas.hp.com/imaging/escl/2011/05/03" xmlns:pwg="http://www.pwg.org/schemas/2010/12/sm"><pwg:Version>2.9</pwg:Version><pwg:State>Stopped</pwg:State><scan:AdfState>ScannerAdfJam</scan:AdfState></scan:ScannerStatus>"""
+IDLE_XML = JAM_XML.replace("Stopped", "Idle").replace("ScannerAdfJam", "ScannerAdfLoaded")
+
+
+def test_scanner_status_diagnosis():
+    from flipscan import scan
+    st = scan.parse_status(JAM_XML)
+    assert st == {"state": "Stopped", "adf": "ScannerAdfJam"}
+    assert "jam" in scan.problem(st)
+    assert scan.problem(scan.parse_status(IDLE_XML)) is None
+    assert "not reachable" in scan.problem(None)
+    assert "Stopped" in scan.problem({"state": "Stopped", "adf": "ScannerAdfEmpty"})
+
+
+def test_ready_waits_until_scanner_recovers(monkeypatch, capsys):
+    import builtins
+    from flipscan import cli, scan
+    states = iter([scan.parse_status(JAM_XML), scan.parse_status(JAM_XML), scan.parse_status(IDLE_XML)])
+    monkeypatch.setattr(scan, "scanner_status", lambda cfg: next(states))
+    monkeypatch.setattr(builtins, "input", lambda *_: "")  # Enter = check again
+    assert cli._ready(Config(), scan) is True
+    assert "paper jam" in capsys.readouterr().out
+    monkeypatch.setattr(scan, "scanner_status", lambda cfg: scan.parse_status(JAM_XML))
+    monkeypatch.setattr(builtins, "input", lambda *_: "q")
+    assert cli._ready(Config(), scan) is False

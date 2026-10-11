@@ -31,6 +31,26 @@ def _get_session(cfg, new: bool, name: str | None = None) -> Session:
     return s
 
 
+def _ready(cfg, scan) -> bool:
+    """Check the scanner before scanning. If it is stopped (jam, cancel on the
+    device, ...), say why and wait until it recovers. False = user chose to quit."""
+    while True:
+        why = scan.problem(scan.scanner_status(cfg))
+        if why is None:
+            return True
+        print(f"  ! Scanner not ready: {why}.")
+        print("    Clear the problem on the device (open/close the feeder cover, remove stuck paper).")
+        ans = _ask("    [Enter] check again  [s] scan anyway  [q] quit > ")
+        if ans == "q":
+            return False
+        if ans == "s":
+            return True
+
+
+def _report_empty(scan, what: str) -> None:
+    print(f"  0 {what}." + (f" scanimage: {scan.last_error}" if scan.last_error else ""))
+
+
 def cmd_scan(cfg, args):
     from . import scan
     if args.height:
@@ -46,6 +66,8 @@ def cmd_scan(cfg, args):
         mode = _ask("Load paper -> [Enter] scan ADF  [f] scan flatbed  [q] quit > ", "a")
         if mode == "q":
             break
+        if not _ready(cfg, scan):
+            break
         tmp = scan.tmpdir()
         try:
             if mode == "f":
@@ -53,7 +75,7 @@ def cmd_scan(cfg, args):
                 while True:
                     img = scan.scan_flatbed_page(cfg, tmp)
                     if img is None:
-                        print("  Nothing scanned.")
+                        _report_empty(scan, "pages scanned")
                     else:
                         scan.add_flatbed_page(session, img, batch)
                         print(f"  Page saved ({len(session.pages)} total)")
@@ -62,16 +84,27 @@ def cmd_scan(cfg, args):
                     tmp = scan.tmpdir()
                 continue
             fronts = scan.scan_adf_fronts(cfg, tmp)
-            print(f"  {len(fronts)} front side(s).")
             if not fronts:
+                _report_empty(scan, "front sides (feeder empty or scan failed)")
                 continue
+            print(f"  {len(fronts)} front side(s).")
+            why = scan.problem(scan.scanner_status(cfg))
+            if why:  # e.g. jam in the middle of the stack: the batch is incomplete
+                print(f"  ! Scan was interrupted: {why}.")
+                if _ask("    [Enter] discard this batch and start over  [k] keep the pages so far > ") != "k":
+                    continue
             if _ask("Flip the stack and reload -> [Enter] scan back sides  [n] single-sided > ") == "n":
                 scan.add_adf_batch(cfg, session, fronts, [])
                 continue
             btmp = scan.tmpdir()
             while True:
+                if not _ready(cfg, scan):
+                    backs = None
+                    break
                 backs = scan.scan_adf_fronts(cfg, btmp)
                 print(f"  {len(backs)} back side(s).")
+                if not backs and scan.last_error:
+                    print(f"  scanimage: {scan.last_error}")
                 if len(backs) == len(fronts):
                     break
                 ans = _ask(f"Count mismatch ({len(fronts)} fronts vs {len(backs)} backs). "
