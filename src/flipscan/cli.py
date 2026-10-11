@@ -43,7 +43,7 @@ def cmd_scan(cfg, args):
         sys.exit("Kein Scanner konfiguriert (config.toml, siehe config.example.toml).")
     session = _get_session(cfg, args.new, args.session)
     while True:
-        mode = _ask("Vorderseiten einlegen -> [Enter] ADF scannen  [f] Flachbett  [q] Ende > ", "a")
+        mode = _ask("Einlegen -> [Enter] ADF scannen  [f] Flachbett scannen  [q] Ende > ", "a")
         if mode == "q":
             break
         tmp = scan.tmpdir()
@@ -51,14 +51,13 @@ def cmd_scan(cfg, args):
             if mode == "f":
                 batch = session.next_batch()
                 while True:
-                    input("Seite auflegen, Enter... ")
                     img = scan.scan_flatbed_page(cfg, tmp)
                     if img is None:
                         print("  Nichts gescannt.")
                     else:
                         scan.add_flatbed_page(session, img, batch)
                         print(f"  Seite gespeichert ({len(session.pages)} gesamt)")
-                    if _ask("Weitere Seite? [Enter] ja  [n] fertig > ") == "n":
+                    if _ask("Naechste Seite auflegen -> [Enter] scannen  [n] fertig > ") == "n":
                         break
                     tmp = scan.tmpdir()
                 continue
