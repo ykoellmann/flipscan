@@ -20,14 +20,14 @@ def _get_session(cfg, new: bool, name: str | None = None) -> Session:
     if name:
         s = Session.open_named(cfg.sessions_path, name)
         if s is None:
-            sys.exit(f"Session {name} nicht gefunden (flipscan sessions).")
+            sys.exit(f"Session {name} not found (see: flipscan sessions).")
         return s
     s = None if new else Session.open_latest(cfg.sessions_path)
     if s is None:
         s = Session.create(cfg.sessions_path)
-        print(f"Neue Session: {s.name}")
+        print(f"New session: {s.name}")
     else:
-        print(f"Session: {s.name} ({len(s.pages)} Seiten)")
+        print(f"Session: {s.name} ({len(s.pages)} pages)")
     return s
 
 
@@ -40,10 +40,10 @@ def cmd_scan(cfg, args):
     if args.dpi:
         cfg.dpi = args.dpi
     if not cfg.scanner:
-        sys.exit("Kein Scanner konfiguriert (config.toml, siehe config.example.toml).")
+        sys.exit("No scanner configured (config.toml, see config.example.toml).")
     session = _get_session(cfg, args.new, args.session)
     while True:
-        mode = _ask("Einlegen -> [Enter] ADF scannen  [f] Flachbett scannen  [q] Ende > ", "a")
+        mode = _ask("Load paper -> [Enter] scan ADF  [f] scan flatbed  [q] quit > ", "a")
         if mode == "q":
             break
         tmp = scan.tmpdir()
@@ -53,43 +53,43 @@ def cmd_scan(cfg, args):
                 while True:
                     img = scan.scan_flatbed_page(cfg, tmp)
                     if img is None:
-                        print("  Nichts gescannt.")
+                        print("  Nothing scanned.")
                     else:
                         scan.add_flatbed_page(session, img, batch)
-                        print(f"  Seite gespeichert ({len(session.pages)} gesamt)")
-                    if _ask("Naechste Seite auflegen -> [Enter] scannen  [n] fertig > ") == "n":
+                        print(f"  Page saved ({len(session.pages)} total)")
+                    if _ask("Place next page -> [Enter] scan  [n] done > ") == "n":
                         break
                     tmp = scan.tmpdir()
                 continue
             fronts = scan.scan_adf_fronts(cfg, tmp)
-            print(f"  {len(fronts)} Vorderseite(n).")
+            print(f"  {len(fronts)} front side(s).")
             if not fronts:
                 continue
-            if _ask("Stapel umdrehen und einlegen -> [Enter] Rueckseiten scannen  [n] einseitig > ") == "n":
+            if _ask("Flip the stack and reload -> [Enter] scan back sides  [n] single-sided > ") == "n":
                 scan.add_adf_batch(cfg, session, fronts, [])
                 continue
             btmp = scan.tmpdir()
             while True:
                 backs = scan.scan_adf_fronts(cfg, btmp)
-                print(f"  {len(backs)} Rueckseite(n).")
+                print(f"  {len(backs)} back side(s).")
                 if len(backs) == len(fronts):
                     break
-                ans = _ask(f"Anzahl passt nicht ({len(fronts)} vs {len(backs)}). "
-                           "[r] Rueckseiten neu  [t] trotzdem  [v] Charge verwerfen > ")
-                if ans == "t":
+                ans = _ask(f"Count mismatch ({len(fronts)} fronts vs {len(backs)} backs). "
+                           "[r] rescan backs  [k] keep anyway  [d] discard batch > ")
+                if ans == "k":
                     break
-                if ans == "v":
+                if ans == "d":
                     backs = None
                     break
                 shutil.rmtree(btmp, ignore_errors=True)
                 btmp = scan.tmpdir()
-                input("Stapel erneut einlegen, Enter... ")
+                input("Reload the stack, then press Enter... ")
             if backs is not None:
                 scan.add_adf_batch(cfg, session, fronts, backs)
-                print("  Charge uebernommen.")
+                print("  Batch added.")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-    print(f"Fertig. Weiter mit: flipscan review  (Session {session.name})")
+    print(f"Done. Next: flipscan review  (session {session.name})")
 
 
 def cmd_review(cfg, args):
@@ -107,7 +107,7 @@ def cmd_upload(cfg, args):
     if args.export:
         export_pdfs(session)
     ok, failed = upload_session(cfg, session)
-    print(f"{len(ok)} hochgeladen, {len(failed)} fehlgeschlagen (bleiben in export/).")
+    print(f"{len(ok)} uploaded, {len(failed)} failed (kept in export/).")
     sys.exit(1 if failed else 0)
 
 
@@ -117,47 +117,47 @@ def cmd_sessions(cfg, args):
             continue
         kept = sum(not p["deleted"] for p in s.pages)
         pending = len(list((s.root / "export").glob("*.pdf"))) if (s.root / "export").exists() else 0
-        print(f"{s.name}  [{'fertig' if s.status == 'done' else 'offen'}]  "
-              f"{len(s.pages)} Seiten ({kept} behalten), {pending} PDF(s) im Outbox")
+        print(f"{s.name}  [{'done' if s.status == 'done' else 'open'}]  "
+              f"{len(s.pages)} pages ({kept} kept), {pending} PDF(s) in outbox")
 
 
 def cmd_ocr(cfg, args):
     from .ocr import run_ocr
     s = _get_session(cfg, False, args.session)
-    print(f"{run_ocr(s)} Seitenzahl(en) erkannt. Im Review: C akzeptiert Schnittvorschlaege.")
+    print(f"{run_ocr(s)} page number(s) detected. In the review UI, C accepts the suggested cuts.")
 
 
 def cmd_init_config(cfg, args):
     """Write a commented starter config (bundled example) unless one exists."""
     target = config_mod.CONFIG_PATH
     if target.exists():
-        sys.exit(f"{target} existiert bereits.")
+        sys.exit(f"{target} already exists.")
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(resources.files("flipscan") / "config.example.toml", target)
-    print(f"Geschrieben: {target}  (Scanner-ID mit `scanimage -L` ermitteln)")
+    print(f"Written: {target}  (find your scanner id with `scanimage -L`)")
 
 
 def main():
     ap = argparse.ArgumentParser(prog="flipscan")
-    ap.add_argument("--config", help="Pfad zur config.toml")
-    ap.add_argument("--session", help="Session-Name (Standard: neueste)")
+    ap.add_argument("--config", help="path to config.toml")
+    ap.add_argument("--session", help="session name (default: latest)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("scan", help="Chargen in eine Session scannen")
-    p.add_argument("--new", action="store_true", help="neue Session beginnen")
-    p.add_argument("--height", type=int, help="Scanhoehe in mm (Config: page_height_mm)")
+    p = sub.add_parser("scan", help="scan batches into a session")
+    p.add_argument("--new", action="store_true", help="start a new session")
+    p.add_argument("--height", type=int, help="scan height in mm (config: page_height_mm)")
     p.add_argument("--back-rotation", type=int, choices=(0, 90, 180, 270),
-                   help="Drehung der Rueckseiten (Config: back_rotation)")
-    p.add_argument("--dpi", type=int, help="Aufloesung (Config: dpi)")
+                   help="rotation of back sides (config: back_rotation)")
+    p.add_argument("--dpi", type=int, help="resolution (config: dpi)")
     p.set_defaults(fn=cmd_scan)
-    p = sub.add_parser("review", help="Review-UI starten")
+    p = sub.add_parser("review", help="start the review UI")
     p.add_argument("--port", type=int, default=5000)
     p.set_defaults(fn=cmd_review)
-    p = sub.add_parser("upload", help="Exportierte PDFs hochladen (Retry)")
-    p.add_argument("--export", action="store_true", help="vorher neu exportieren")
+    p = sub.add_parser("upload", help="upload exported PDFs (also retries failed ones)")
+    p.add_argument("--export", action="store_true", help="re-export before uploading")
     p.set_defaults(fn=cmd_upload)
-    sub.add_parser("sessions", help="Sessions auflisten").set_defaults(fn=cmd_sessions)
-    sub.add_parser("ocr", help="Seitenzahlen erkennen (Schnittvorschlaege)").set_defaults(fn=cmd_ocr)
-    sub.add_parser("init-config", help="Beispiel-Config nach ~/.config/flipscan schreiben").set_defaults(fn=cmd_init_config)
+    sub.add_parser("sessions", help="list sessions").set_defaults(fn=cmd_sessions)
+    sub.add_parser("ocr", help="detect page numbers (suggests cuts)").set_defaults(fn=cmd_ocr)
+    sub.add_parser("init-config", help="write an example config to ~/.config/flipscan").set_defaults(fn=cmd_init_config)
     args = ap.parse_args()
     from pathlib import Path
     cfg = config_mod.load(Path(args.config) if args.config else None)

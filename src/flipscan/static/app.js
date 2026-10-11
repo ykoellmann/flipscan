@@ -32,14 +32,14 @@ function render() {
         + (S.pages[sel] && S.pages[sel].id === p.id ? " sel" : "");
       pe.dataset.id = p.id;
       pe.innerHTML = `<img src="/thumbs/${p.file}" style="transform:rotate(${p.rotation}deg)">`
-        + `<span class="tag">${p.side === "back" ? "R" : "V"}${p.blank_suggested ? " leer?" : ""}${p.page_of ? ` ${p.page_of[0]}/${p.page_of[1]}` : ""}</span>`;
+        + `<span class="tag">${p.side === "back" ? "B" : "F"}${p.blank_suggested ? " blank?" : ""}${p.page_of ? ` ${p.page_of[0]}/${p.page_of[1]}` : ""}</span>`;
       pe.onclick = () => { sel = S.pages.findIndex(q => q.id === p.id); render(); };
       el.appendChild(pe);
     });
     strip.appendChild(el);
   });
-  $("#info").textContent = !S.name ? "Keine Session" : `${S.name} · ${S.pages.length} Seiten · ${S.documents.length} Dokument(e)`;
-  const d = $("#done"); d.textContent = S.status === "done" ? "✓ Fertig (wieder öffnen)" : "Als fertig markieren";
+  $("#info").textContent = !S.name ? "No session" : `${S.name} · ${S.pages.length} pages · ${S.documents.length} document(s)`;
+  const d = $("#done"); d.textContent = S.status === "done" ? "✓ Done (reopen)" : "Mark as done";
   d.className = S.status === "done" ? "is-done" : "";
   renderPreview();
   const s = document.querySelector(".page.sel"); if (s) s.scrollIntoView({block: "nearest"});
@@ -51,8 +51,8 @@ function renderPreview() {
   const src = "/pages/" + p.file;
   if (!img.src.endsWith(src)) img.src = src;
   img.style.transform = `rotate(${p.rotation}deg)`;
-  $("#pv-meta").textContent = `Blatt ${p.sheet} · ${p.side === "back" ? "Rückseite" : "Vorderseite"} · ${p.source}`
-    + (p.deleted ? " · gelöscht" : "") + (p.doc_name ? ` · "${p.doc_name}"` : "");
+  $("#pv-meta").textContent = `Sheet ${p.sheet} · ${p.side === "back" ? "back" : "front"} · ${p.source}`
+    + (p.deleted ? " · deleted" : "") + (p.doc_name ? ` · "${p.doc_name}"` : "");
 }
 
 async function loadSessions() {
@@ -61,14 +61,14 @@ async function loadSessions() {
   list.forEach(s => {
     const el = document.createElement("div");
     el.className = "sess" + (s.status === "done" ? " done" : "") + (s.current ? " current" : "");
-    el.innerHTML = `${s.name}<button class="del" title="Session löschen">🗑</button><small>${s.status === "done" ? "✓ fertig" : "offen"} · ${s.kept}/${s.pages} Seiten · ${s.documents} Dok.</small>`;
+    el.innerHTML = `${s.name}<button class="del" title="Delete session">🗑</button><small>${s.status === "done" ? "✓ done" : "open"} · ${s.kept}/${s.pages} pages · ${s.documents} docs</small>`;
     el.onclick = async () => { S = await api("/api/select", {name: s.name}); sel = 0; render(); loadSessions(); };
     el.querySelector(".del").onclick = async e => {
       e.stopPropagation();
-      const warn = s.status === "done" ? "" : "\nAchtung: Die Session ist noch nicht als fertig markiert!";
-      if (!confirm(`Session ${s.name} mit allen Scans unwiderruflich löschen?${warn}`)) return;
+      const warn = s.status === "done" ? "" : "\nWarning: this session is not marked as done!";
+      if (!confirm(`Permanently delete session ${s.name} with all its scans?${warn}`)) return;
       const r = await fetch("/api/sessions/" + encodeURIComponent(s.name), {method: "DELETE"});
-      if (!r.ok) { toast("Löschen fehlgeschlagen"); return; }
+      if (!r.ok) { toast("Delete failed"); return; }
       S = await r.json(); sel = 0; render(); loadSessions();
     };
     box.appendChild(el);
@@ -92,7 +92,7 @@ document.addEventListener("keydown", async e => {
     case "r": update([p.id], {rotation: (p.rotation + 90) % 360}); break;
     case "R": update(S.pages.filter(q => q.side === "back").map(q => q.id), {rotate_by: 180}); break;
     case "n": {
-      const name = prompt("Dokumentname (leer = Standard)", p.doc_name || "");
+      const name = prompt("Document name (empty = default)", p.doc_name || "");
       if (name !== null) update([p.id], {doc_name: name}); break; }
     case "C": update(S.pages.filter(q => q.cut_suggested && !q.cut_before).map(q => q.id), {cut_before: true}); break;
     case "u": S = await api("/api/undo", {}); render(); break;
@@ -108,7 +108,7 @@ document.addEventListener("keydown", async e => {
 async function doExport(upload) {
   const r = await api("/api/export", {upload});
   S = await api("/api/session"); render(); loadSessions();
-  toast(`${r.exported.length} PDF(s) exportiert` + (upload ? `, ${r.uploaded.length} hochgeladen, ${r.failed.length} fehlgeschlagen` : ""));
+  toast(`${r.exported.length} PDF(s) exported` + (upload ? `, ${r.uploaded.length} uploaded, ${r.failed.length} failed` : ""));
 }
 $("#done").onclick = async () => {
   S = await api("/api/status", {status: S.status === "done" ? "open" : "done"}); render(); loadSessions();
