@@ -41,17 +41,18 @@ def _send(cfg: Config, pdf: Path) -> bool:
 
 
 def upload_session(cfg: Config, session: Session) -> tuple[list[Path], list[Path]]:
-    """Returns (uploaded, failed). Uploaded files are moved to export/done/."""
+    """Returns (uploaded, failed). Uploaded PDFs are deleted locally; failed ones
+    stay in export/ for the next run."""
     out = session.root / "export"
-    done = out / "done"
-    done.mkdir(parents=True, exist_ok=True)
     ok, failed = [], []
-    for pdf in sorted(out.glob("*.pdf")):
+    for pdf in sorted(out.glob("*.pdf")) if out.exists() else []:
         if _send(cfg, pdf):
-            shutil.move(pdf, done / pdf.name)
+            pdf.unlink()
             ok.append(pdf)
         else:
             failed.append(pdf)
+    if out.exists() and not any(out.iterdir()):
+        out.rmdir()
     if ok and not failed:
         session.set_status("done")
     return ok, failed

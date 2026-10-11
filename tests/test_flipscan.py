@@ -9,11 +9,15 @@ from flipscan.upload import upload_session
 
 
 def make_img(path, text=True):
-    img = Image.new("RGB", (600, 800), "white")
+    """A4 @300dpi: thin real text lines (the case that broke blank detection) or blank."""
+    from PIL import ImageFont
+    img = Image.new("RGB", (2480, 3508), "white")
     if text:
         d = ImageDraw.Draw(img)
-        for y in range(200, 600, 20):
-            d.rectangle((100, y, 500, y + 8), fill="black")
+        font = ImageFont.load_default(size=28)
+        for i in range(40):
+            d.text((300, 400 + i * 70), "Sehr geehrte Damen und Herren, anbei die Rechnung Nr. 12345",
+                   fill="black", font=font)
     img.save(path, "JPEG")
     return path
 
@@ -29,7 +33,7 @@ def test_flow(tmp_path):
     add_adf_batch(cfg, s, fronts, backs)
     assert [p["side"] for p in s.pages] == ["front", "back"] * 3
     assert s.pages[1]["rotation"] == 180
-    blanks = [p for p in s.pages if p["blank_suggested"]]
+    blanks = [p for p in s.pages if p["ink"] <= 0.02]
     assert len(blanks) == 1 and blanks[0]["side"] == "back"
 
     # cut before sheet 3, delete blank
@@ -49,6 +53,7 @@ def test_flow(tmp_path):
     ok, failed = upload_session(cfg, s)
     assert len(ok) == 2 and not failed
     assert len(list((tmp_path / "consume").glob("*.pdf"))) == 2
+    assert not (s.root / "export").exists()  # local copies removed after upload
 
 
 def test_api(tmp_path):
@@ -176,3 +181,67 @@ def test_empty_sessions_hidden(tmp_path):
     cfg = Config(sessions_dir=str(tmp_path))
     s = Session.create(tmp_path)
     assert create_app(cfg, s).test_client().get("/api/sessions").get_json() == []
+
+
+def test_blank_detection():
+    from flipscan.session import non_paper_fraction
+    from PIL import ImageFont
+    white = Image.new("RGB", (2480, 3508), "white")
+    assert non_paper_fraction(white) < 0.001
+    gray = Image.new("RGB", (2480, 3508), (225, 225, 225))  # dingy paper, no content
+    assert non_paper_fraction(gray) < 0.001
+    import random
+    random.seed(1)
+    noisy = white.copy(); px = noisy.load()
+    for _ in range(3000):
+        px[random.randrange(2480), random.randrange(3508)] = (200, 200, 200)
+    assert non_paper_fraction(noisy) < 0.02
+    text = white.copy(); d = ImageDraw.Draw(text)
+    for i in range(40):
+        d.text((300, 400 + i * 70), "Sehr geehrte Damen und Herren, anbei die Rechnung",
+               fill="black", font=ImageFont.load_default(size=28))
+    assert non_paper_fraction(text) > 0.02
+    # only a header line inside the 10% margin -> still counts as blank (margin ignored)
+    hdr = white.copy(); ImageDraw.Draw(hdr).text((300, 100), "Briefkopf", fill="black",
+                                                 font=ImageFont.load_default(size=60))
+    assert non_paper_fraction(hdr) < 0.001
+    assert non_paper_fraction(Image.new("RGB", (2480, 3508), "black")) == 1.0
+
+
+def test_blank_threshold_from_config(tmp_path):
+    cfg = Config(sessions_dir=str(tmp_path), blank_threshold=0.99999)  # nearly everything "not blank"
+    s = Session.create(tmp_path)
+    s.add_page(make_img(tmp_path / "w.jpg", text=False), "Flatbed", s.new_sheet(), "front")
+    s.add_page(make_img(tmp_path / "t.jpg"), "Flatbed", s.new_sheet(), "front")
+    pages = create_app(cfg, s).test_client().get("/api/session").get_json()["pages"]
+    assert [p["blank_suggested"] for p in pages] == [True, False]
+
+
+def test_legacy_pages_remeasured(tmp_path):
+    s = Session.create(tmp_path)
+    s.add_page(make_img(tmp_path / "t.jpg"), "Flatbed", s.new_sheet(), "front")
+    del s.pages[0]["ink"]; s.pages[0]["blank_suggested"] = True  # old buggy format
+    s.save()
+    s2 = Session(s.root); s2.ensure_ink()
+    assert s2.pages[0]["ink"] > 0.02 and "blank_suggested" not in s2.pages[0]
+
+
+def test_delete_session(tmp_path):
+    cfg = Config(sessions_dir=str(tmp_path))
+    a = Session.create(tmp_path)
+    a.add_page(make_img(tmp_path / "a.jpg"), "Flatbed", a.new_sheet(), "front")
+    c = create_app(cfg, a).test_client()
+    assert c.delete("/api/sessions/..%2F..").status_code == 404
+    assert c.delete("/api/sessions/nope").status_code == 404
+    r = c.delete(f"/api/sessions/{a.name}")
+    assert r.status_code == 200 and r.get_json()["name"] is None
+    assert not a.root.exists() and c.get("/api/sessions").get_json() == []
+
+
+def test_failed_upload_keeps_pdf(tmp_path):
+    cfg = Config(upload=Upload(backend="folder", path=str(tmp_path / "missing")))
+    s = Session.create(tmp_path)
+    s.add_page(make_img(tmp_path / "a.jpg"), "Flatbed", s.new_sheet(), "front")
+    export_pdfs(s)
+    ok, failed = upload_session(cfg, s)
+    assert not ok and len(failed) == 1 and failed[0].exists() and s.status == "open"

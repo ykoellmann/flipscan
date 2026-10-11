@@ -23,7 +23,12 @@ Optional: `tesseract` (+ `deu`/`eng` data) for page-number detection.
 
 Review keys: `←/→` navigate, `c` cut before sheet, `x` delete, `r` rotate, `u` undo,
 `n` name document, `R` rotate all back sides by 180° (fixes a wrong flip direction without rescanning), `B` delete suggested blanks, `C` accept suggested cuts, `space` zoom.
-Blank pages and OCR cuts are only *suggestions*, never applied automatically.
+Blank pages and OCR cuts are only *suggestions*, never applied automatically. A page is
+suggested as blank when at least `blank_threshold` (default 98%) of its inner area (10% margin
+ignored, so header/footer-only pages are kept) is empty paper. Sessions can be deleted in the UI (🗑).
+
+After a successful upload the exported PDFs are deleted locally (failed ones stay in
+`<session>/export/` and are retried by `flipscan upload`) and the session is marked done.
 
 ## Configuration
 Resolved from `--config`, `$FLIPSCAN_CONFIG`, then `~/.config/flipscan/config.toml`.
