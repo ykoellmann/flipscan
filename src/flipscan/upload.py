@@ -52,4 +52,6 @@ def upload_session(cfg: Config, session: Session) -> tuple[list[Path], list[Path
             ok.append(pdf)
         else:
             failed.append(pdf)
+    if ok and not failed:
+        session.set_status("done")
     return ok, failed

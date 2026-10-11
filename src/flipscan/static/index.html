@@ -3,9 +3,13 @@
 <link rel="stylesheet" href="/static/style.css"></head>
 <body>
 <header><b>Flipscan</b> <span id="info"></span>
-<span class="keys">←→ navigieren · c Schnitt · x löschen · r drehen · R alle Rückseiten um 180° drehen · n Name (erste Seite des Dokuments) · C Schnittvorschläge · u Undo · B Leerseiten löschen · Leertaste Zoom</span>
-<button id="export">Exportieren</button><button id="upload">Export + Upload</button></header>
-<main id="strip"></main>
+<span class="keys">←→ navigieren · c Schnitt · x löschen · r drehen · R alle Rückseiten 180° · u Undo · n Name · B Leerseiten löschen · C Schnittvorschläge · Leertaste Zoom</span>
+<button id="done"></button><button id="export">Exportieren</button><button id="upload">Export + Upload</button></header>
+<div id="layout">
+  <aside id="sessions"></aside>
+  <main id="strip"></main>
+  <aside id="preview"><div id="pv-meta"></div><div id="pv-img"><img alt=""></div></aside>
+</div>
 <div id="zoom" hidden><img></div>
 <div id="toast" hidden></div>
 <script src="/static/app.js"></script></body></html>

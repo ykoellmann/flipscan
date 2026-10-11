@@ -118,7 +118,8 @@ def cmd_sessions(cfg, args):
     for s in Session.list_all(cfg.sessions_path):
         kept = sum(not p["deleted"] for p in s.pages)
         pending = len(list((s.root / "export").glob("*.pdf"))) if (s.root / "export").exists() else 0
-        print(f"{s.name}  {len(s.pages)} Seiten ({kept} behalten), {pending} PDF(s) im Outbox")
+        print(f"{s.name}  [{'fertig' if s.status == 'done' else 'offen'}]  "
+              f"{len(s.pages)} Seiten ({kept} behalten), {pending} PDF(s) im Outbox")
 
 
 def cmd_ocr(cfg, args):

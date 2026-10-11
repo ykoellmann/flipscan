@@ -64,6 +64,15 @@ class Session:
         return cls(found[-1].parent) if found else None
 
     @property
+    def status(self) -> str:
+        return self.data.get("status", "open")
+
+    def set_status(self, status: str) -> None:
+        with self.lock:
+            self.data["status"] = status
+            self.save()
+
+    @property
     def name(self) -> str:
         return self.root.name
 
@@ -102,6 +111,7 @@ class Session:
                     "side": side, "batch": batch, "rotation": rotation,
                     "deleted": False, "cut_before": False, "blank_suggested": blank}
             self.pages.append(page)
+            self.data["status"] = "open"  # new scans reopen a finished session
             self.save()
             return page
 

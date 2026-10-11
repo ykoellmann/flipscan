@@ -39,7 +39,32 @@ function render() {
     strip.appendChild(el);
   });
   $("#info").textContent = `${S.name} · ${S.pages.length} Seiten · ${S.documents.length} Dokument(e)`;
+  const d = $("#done"); d.textContent = S.status === "done" ? "✓ Fertig (wieder öffnen)" : "Als fertig markieren";
+  d.className = S.status === "done" ? "is-done" : "";
+  renderPreview();
   const s = document.querySelector(".page.sel"); if (s) s.scrollIntoView({block: "nearest"});
+}
+
+function renderPreview() {
+  const p = S.pages[sel], img = $("#pv-img img");
+  if (!p) { img.removeAttribute("src"); $("#pv-meta").textContent = ""; return; }
+  const src = "/pages/" + p.file;
+  if (!img.src.endsWith(src)) img.src = src;
+  img.style.transform = `rotate(${p.rotation}deg)`;
+  $("#pv-meta").textContent = `Blatt ${p.sheet} · ${p.side === "back" ? "Rückseite" : "Vorderseite"} · ${p.source}`
+    + (p.deleted ? " · gelöscht" : "") + (p.doc_name ? ` · "${p.doc_name}"` : "");
+}
+
+async function loadSessions() {
+  const list = await api("/api/sessions");
+  const box = $("#sessions"); box.innerHTML = "";
+  list.forEach(s => {
+    const el = document.createElement("div");
+    el.className = "sess" + (s.status === "done" ? " done" : "") + (s.current ? " current" : "");
+    el.innerHTML = `${s.name}<small>${s.status === "done" ? "✓ fertig" : "offen"} · ${s.kept}/${s.pages} Seiten · ${s.documents} Dok.</small>`;
+    el.onclick = async () => { S = await api("/api/select", {name: s.name}); sel = 0; render(); loadSessions(); };
+    box.appendChild(el);
+  });
 }
 
 async function update(ids, fields) { S = await api("/api/update", {ids, ...fields}); render(); }
@@ -74,8 +99,12 @@ document.addEventListener("keydown", async e => {
 
 async function doExport(upload) {
   const r = await api("/api/export", {upload});
+  S = await api("/api/session"); render(); loadSessions();
   toast(`${r.exported.length} PDF(s) exportiert` + (upload ? `, ${r.uploaded.length} hochgeladen, ${r.failed.length} fehlgeschlagen` : ""));
 }
+$("#done").onclick = async () => {
+  S = await api("/api/status", {status: S.status === "done" ? "open" : "done"}); render(); loadSessions();
+};
 $("#export").onclick = () => doExport(false);
 $("#upload").onclick = () => doExport(true);
-api("/api/session").then(s => { S = s; render(); });
+api("/api/session").then(s => { S = s; render(); loadSessions(); });

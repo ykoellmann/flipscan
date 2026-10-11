@@ -141,3 +141,32 @@ def test_rotate_by(tmp_path):
     assert [p["rotation"] for p in s.pages] == [270, 90]
     s.undo()
     assert [p["rotation"] for p in s.pages] == [90, 270]
+
+
+def test_multi_session_and_done(tmp_path):
+    cfg = Config(sessions_dir=str(tmp_path / "s"),
+                 upload=Upload(backend="folder", path=str(tmp_path / "c")))
+    (tmp_path / "c").mkdir()
+    a = Session.create(cfg.sessions_path)
+    a.add_page(make_img(tmp_path / "a.jpg"), "Flatbed", a.new_sheet(), "front")
+    import time; time.sleep(1.1)
+    b = Session.create(cfg.sessions_path)
+    b.add_page(make_img(tmp_path / "b.jpg"), "Flatbed", b.new_sheet(), "front")
+    b.add_page(make_img(tmp_path / "b2.jpg"), "Flatbed", b.new_sheet(), "front")
+    c = create_app(cfg, b).test_client()
+    names = [s["name"] for s in c.get("/api/sessions").get_json()]
+    assert names == [b.name, a.name]
+    assert c.get("/api/session").get_json()["name"] == b.name
+    assert c.post("/api/select", json={"name": a.name}).get_json()["pages"].__len__() == 1
+    assert c.post("/api/select", json={"name": "nope"}).status_code == 404
+    # upload success marks the selected session done, persisted
+    r = c.post("/api/export", json={"upload": True}).get_json()
+    assert r["status"] == "done" and Session(a.root).status == "done"
+    assert next(s for s in c.get("/api/sessions").get_json() if s["name"] == a.name)["status"] == "done"
+    # manual toggle + scanning reopens
+    c.post("/api/status", json={"status": "open"})
+    assert Session(a.root).status == "open"
+    c.post("/api/status", json={"status": "done"})
+    a2 = Session(a.root)
+    a2.add_page(make_img(tmp_path / "x.jpg"), "Flatbed", a2.new_sheet(), "front")
+    assert Session(a.root).status == "open"
