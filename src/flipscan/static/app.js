@@ -38,7 +38,7 @@ function render() {
     });
     strip.appendChild(el);
   });
-  $("#info").textContent = `${S.name} · ${S.pages.length} Seiten · ${S.documents.length} Dokument(e)`;
+  $("#info").textContent = !S.name ? "Keine Session" : `${S.name} · ${S.pages.length} Seiten · ${S.documents.length} Dokument(e)`;
   const d = $("#done"); d.textContent = S.status === "done" ? "✓ Fertig (wieder öffnen)" : "Als fertig markieren";
   d.className = S.status === "done" ? "is-done" : "";
   renderPreview();
@@ -61,8 +61,16 @@ async function loadSessions() {
   list.forEach(s => {
     const el = document.createElement("div");
     el.className = "sess" + (s.status === "done" ? " done" : "") + (s.current ? " current" : "");
-    el.innerHTML = `${s.name}<small>${s.status === "done" ? "✓ fertig" : "offen"} · ${s.kept}/${s.pages} Seiten · ${s.documents} Dok.</small>`;
+    el.innerHTML = `${s.name}<button class="del" title="Session löschen">🗑</button><small>${s.status === "done" ? "✓ fertig" : "offen"} · ${s.kept}/${s.pages} Seiten · ${s.documents} Dok.</small>`;
     el.onclick = async () => { S = await api("/api/select", {name: s.name}); sel = 0; render(); loadSessions(); };
+    el.querySelector(".del").onclick = async e => {
+      e.stopPropagation();
+      const warn = s.status === "done" ? "" : "\nAchtung: Die Session ist noch nicht als fertig markiert!";
+      if (!confirm(`Session ${s.name} mit allen Scans unwiderruflich löschen?${warn}`)) return;
+      const r = await fetch("/api/sessions/" + encodeURIComponent(s.name), {method: "DELETE"});
+      if (!r.ok) { toast("Löschen fehlgeschlagen"); return; }
+      S = await r.json(); sel = 0; render(); loadSessions();
+    };
     box.appendChild(el);
   });
 }
