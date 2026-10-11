@@ -11,23 +11,41 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PIL import Image, ImageFilter
+from PIL import Image
 
 THUMB_WIDTH = 320
-BLANK_INK_THRESHOLD = 0.002  # fraction of dark pixels in the inner area
+MEASURE_SIZE = 1000   # long edge for the blank measurement; smaller smears thin text away
+PAPER_PERCENTILE = 0.95
+INK_DELTA = 40        # a pixel counts as content if darker than the page's own paper white by this much
+MIN_PAPER_WHITE = 150  # darker "paper" (e.g. a black page) is never blank
 
 
-def ink_fraction(img: Image.Image) -> float:
-    """Dark-pixel share of the inner area (10% margin cut off all around), so
-    pages that only carry a header/footer are not flagged as blank."""
+def non_paper_fraction(img: Image.Image) -> float:
+    """Share of the inner area (10% margin cut off all around, so header/footer
+    only pages are kept) that differs from the page's own paper white."""
     g = img.convert("L")
-    g.thumbnail((600, 600))
+    g.thumbnail((MEASURE_SIZE, MEASURE_SIZE))
     w, h = g.size
-    inner = g.crop((int(w * .1), int(h * .1), int(w * .9), int(h * .9)))
-    inner = inner.filter(ImageFilter.MedianFilter(3))  # drop scanner speckle
-    px = inner.get_flattened_data() if hasattr(inner, "get_flattened_data") else inner.getdata()
-    dark = sum(1 for p in px if p < 128)
-    return dark / max(1, inner.size[0] * inner.size[1])
+    hist = g.crop((int(w * .1), int(h * .1), int(w * .9), int(h * .9))).histogram()
+    total = sum(hist)
+    acc, paper = 0, 255
+    for level, n in enumerate(hist):
+        acc += n
+        if acc >= total * PAPER_PERCENTILE:
+            paper = level
+            break
+    if paper < MIN_PAPER_WHITE:
+        return 1.0
+    return sum(hist[:max(0, paper - INK_DELTA)]) / total
+
+
+def delete_session(sessions_dir: Path, name: str) -> bool:
+    """Remove a session folder; only direct children of sessions_dir."""
+    root = (sessions_dir / name).resolve()
+    if root.parent != sessions_dir.resolve() or not (root / "session.json").exists():
+        return False
+    shutil.rmtree(root)
+    return True
 
 
 class Session:
@@ -87,6 +105,17 @@ class Session:
                 json.dump(self.data, f, indent=1)
             os.replace(tmp, self.root / "session.json")
 
+    def ensure_ink(self) -> None:
+        """Measure pages saved before `ink` existed (or with the old buggy flag)."""
+        with self.lock:
+            todo = [p for p in self.pages if "ink" not in p]
+            for p in todo:
+                p.pop("blank_suggested", None)
+                with Image.open(self.root / "pages" / p["file"]) as img:
+                    p["ink"] = non_paper_fraction(img)
+            if todo:
+                self.save()
+
     # --- adding pages ----------------------------------------------
     def new_sheet(self) -> int:
         n = self.data["next_sheet"]
@@ -103,13 +132,13 @@ class Session:
             dest = self.root / "pages" / name
             shutil.move(image_path, dest)  # tmp and sessions dir may be on different filesystems
             with Image.open(dest) as img:
-                blank = ink_fraction(img) < BLANK_INK_THRESHOLD
+                ink = non_paper_fraction(img)
                 t = img.copy()
                 t.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 2))
                 t.convert("RGB").save(self.root / "thumbs" / name, quality=80)
             page = {"id": pid, "file": name, "source": source, "sheet": sheet,
                     "side": side, "batch": batch, "rotation": rotation,
-                    "deleted": False, "cut_before": False, "blank_suggested": blank}
+                    "deleted": False, "cut_before": False, "ink": ink}
             self.pages.append(page)
             self.data["status"] = "open"  # new scans reopen a finished session
             self.save()
