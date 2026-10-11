@@ -116,6 +116,8 @@ def cmd_upload(cfg, args):
 
 def cmd_sessions(cfg, args):
     for s in Session.list_all(cfg.sessions_path):
+        if not s.pages:
+            continue
         kept = sum(not p["deleted"] for p in s.pages)
         pending = len(list((s.root / "export").glob("*.pdf"))) if (s.root / "export").exists() else 0
         print(f"{s.name}  [{'fertig' if s.status == 'done' else 'offen'}]  "

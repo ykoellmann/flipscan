@@ -170,3 +170,9 @@ def test_multi_session_and_done(tmp_path):
     a2 = Session(a.root)
     a2.add_page(make_img(tmp_path / "x.jpg"), "Flatbed", a2.new_sheet(), "front")
     assert Session(a.root).status == "open"
+
+
+def test_empty_sessions_hidden(tmp_path):
+    cfg = Config(sessions_dir=str(tmp_path))
+    s = Session.create(tmp_path)
+    assert create_app(cfg, s).test_client().get("/api/sessions").get_json() == []

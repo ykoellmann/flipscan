@@ -42,7 +42,8 @@ def create_app(cfg: Config, session: Session) -> Flask:
     @app.get("/api/sessions")
     def sessions():
         names = {p.parent.name for p in cfg.sessions_path.glob("*/session.json")} | set(cache)
-        return jsonify([summary(get(n)) for n in sorted(names, reverse=True) if get(n)])
+        found = [get(n) for n in sorted(names, reverse=True)]
+        return jsonify([summary(s) for s in found if s and s.pages])  # hide empty sessions
 
     @app.post("/api/select")
     def select():
