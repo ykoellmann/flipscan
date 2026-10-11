@@ -5,6 +5,7 @@ session.json, which is always written atomically.
 """
 import json
 import os
+import shutil
 import tempfile
 import threading
 from datetime import datetime
@@ -91,7 +92,7 @@ class Session:
             self.data["next_page"] = pid + 1
             name = f"{pid:05d}.jpg"
             dest = self.root / "pages" / name
-            os.replace(image_path, dest)
+            shutil.move(image_path, dest)  # tmp and sessions dir may be on different filesystems
             with Image.open(dest) as img:
                 blank = ink_fraction(img) < BLANK_INK_THRESHOLD
                 t = img.copy()
