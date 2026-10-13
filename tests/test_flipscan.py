@@ -289,3 +289,32 @@ def test_move_pages(tmp_path):
     # export follows the new order
     from flipscan.export import export_pdfs
     assert len(export_pdfs(Session(s.root))) == 1
+
+
+def test_mismatch_allows_rescanning_fronts(tmp_path, monkeypatch):
+    import builtins
+    from flipscan import cli, scan
+    cfg = Config(scanner="x", sessions_dir=str(tmp_path / "s"))
+    s = Session.create(cfg.sessions_path)
+    calls = []
+
+    def fake_scan(cfg_, outdir):
+        n = next(batches)
+        calls.append(n)
+        files = []
+        for i in range(n):
+            f = outdir / f"p_{i}.jpg"
+            make_img(f, text=False)
+            files.append(f)
+        return files
+
+    monkeypatch.setattr(scan, "scan_adf_fronts", fake_scan)
+    monkeypatch.setattr(scan, "scanner_status", lambda cfg_: {"state": "Idle", "adf": "ScannerAdfLoaded"})
+    # flip (Enter) -> mismatch -> "f" rescan fronts -> reload Enter -> flip (Enter) -> backs ok
+    answers = iter(["", "f", "", ""])
+    monkeypatch.setattr(builtins, "input", lambda *_: next(answers))
+    # fronts 4, backs 5 (mismatch) -> fronts rescanned: 5, backs 5 (match)
+    batches = iter([4, 5, 5, 5])
+    cli._adf_batch(cfg, s, scan)
+    assert calls == [4, 5, 5, 5]
+    assert len(s.pages) == 10 and {p["side"] for p in s.pages} == {"front", "back"}
