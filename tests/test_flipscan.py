@@ -291,15 +291,16 @@ def test_move_pages(tmp_path):
     assert len(export_pdfs(Session(s.root))) == 1
 
 
-def test_mismatch_allows_rescanning_fronts(tmp_path, monkeypatch):
+def _run_batch(tmp_path, monkeypatch, scans, answers):
     import builtins
     from flipscan import cli, scan
     cfg = Config(scanner="x", sessions_dir=str(tmp_path / "s"))
     s = Session.create(cfg.sessions_path)
+    counts = iter(scans)
     calls = []
 
     def fake_scan(cfg_, outdir):
-        n = next(batches)
+        n = next(counts)
         calls.append(n)
         files = []
         for i in range(n):
@@ -310,11 +311,32 @@ def test_mismatch_allows_rescanning_fronts(tmp_path, monkeypatch):
 
     monkeypatch.setattr(scan, "scan_adf_fronts", fake_scan)
     monkeypatch.setattr(scan, "scanner_status", lambda cfg_: {"state": "Idle", "adf": "ScannerAdfLoaded"})
-    # flip (Enter) -> mismatch -> "f" rescan fronts -> reload Enter -> flip (Enter) -> backs ok
-    answers = iter(["", "f", "", ""])
-    monkeypatch.setattr(builtins, "input", lambda *_: next(answers))
-    # fronts 4, backs 5 (mismatch) -> fronts rescanned: 5, backs 5 (match)
-    batches = iter([4, 5, 5, 5])
+    it = iter(answers)
+    monkeypatch.setattr(builtins, "input", lambda *_: next(it))
     cli._adf_batch(cfg, s, scan)
-    assert calls == [4, 5, 5, 5]
-    assert len(s.pages) == 10 and {p["side"] for p in s.pages} == {"front", "back"}
+    return s, calls
+
+
+def test_mismatch_rescan_fronts_keeps_backs(tmp_path, monkeypatch):
+    # fronts 4, backs 5 (mismatch) -> rescan fronts only: 5 -> pair complete, backs NOT rescanned
+    s, calls = _run_batch(tmp_path, monkeypatch, [4, 5, 5], ["", "f", ""])
+    assert calls == [4, 5, 5]
+    assert len(s.pages) == 10
+
+
+def test_mismatch_rescan_backs_keeps_fronts(tmp_path, monkeypatch):
+    s, calls = _run_batch(tmp_path, monkeypatch, [5, 4, 5], ["", "r", ""])
+    assert calls == [5, 4, 5] and len(s.pages) == 10
+
+
+def test_mismatch_can_alternate_until_it_matches(tmp_path, monkeypatch):
+    # 4/5 -> rescan fronts (3, still wrong) -> rescan backs (3) -> match
+    s, calls = _run_batch(tmp_path, monkeypatch, [4, 5, 3, 3], ["", "f", "", "r", ""])
+    assert calls == [4, 5, 3, 3] and len(s.pages) == 6
+
+
+def test_mismatch_discard_and_keep(tmp_path, monkeypatch):
+    s, calls = _run_batch(tmp_path / "a", monkeypatch, [4, 5], ["", "d"])
+    assert not s.pages
+    s, calls = _run_batch(tmp_path / "b", monkeypatch, [4, 5], ["", "k"])
+    assert len(s.pages) == 9
