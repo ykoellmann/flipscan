@@ -317,26 +317,46 @@ def _run_batch(tmp_path, monkeypatch, scans, answers):
     return s, calls
 
 
+def test_accept_prompt_on_match(tmp_path, monkeypatch):
+    s, calls = _run_batch(tmp_path, monkeypatch, [3, 3], ["", ""])  # flip, accept
+    assert calls == [3, 3] and len(s.pages) == 6
+
+
+def test_rescan_fronts_before_flipping(tmp_path, monkeypatch):
+    # fronts 3 (bad) -> "r" rescan -> 4; then backs 4 -> accept
+    s, calls = _run_batch(tmp_path, monkeypatch, [3, 4, 4], ["r", "", "", ""])
+    assert calls == [3, 4, 4] and len(s.pages) == 8
+
+
+def test_rescan_even_when_counts_match(tmp_path, monkeypatch):
+    # 3/3 match but backs look bad -> "r" rescan backs -> 3 again -> accept
+    s, calls = _run_batch(tmp_path, monkeypatch, [3, 3, 3], ["", "r", "", ""])
+    assert calls == [3, 3, 3] and len(s.pages) == 6
+    s, calls = _run_batch(tmp_path / "b", monkeypatch, [3, 3, 3], ["", "f", "", ""])  # rescan fronts instead
+    assert calls == [3, 3, 3] and len(s.pages) == 6
+
+
 def test_mismatch_rescan_fronts_keeps_backs(tmp_path, monkeypatch):
     # fronts 4, backs 5 (mismatch) -> rescan fronts only: 5 -> pair complete, backs NOT rescanned
-    s, calls = _run_batch(tmp_path, monkeypatch, [4, 5, 5], ["", "f", ""])
-    assert calls == [4, 5, 5]
-    assert len(s.pages) == 10
+    s, calls = _run_batch(tmp_path, monkeypatch, [4, 5, 5], ["", "f", "", ""])
+    assert calls == [4, 5, 5] and len(s.pages) == 10
 
 
 def test_mismatch_rescan_backs_keeps_fronts(tmp_path, monkeypatch):
-    s, calls = _run_batch(tmp_path, monkeypatch, [5, 4, 5], ["", "r", ""])
+    s, calls = _run_batch(tmp_path, monkeypatch, [5, 4, 5], ["", "r", "", ""])
     assert calls == [5, 4, 5] and len(s.pages) == 10
 
 
 def test_mismatch_can_alternate_until_it_matches(tmp_path, monkeypatch):
-    # 4/5 -> rescan fronts (3, still wrong) -> rescan backs (3) -> match
-    s, calls = _run_batch(tmp_path, monkeypatch, [4, 5, 3, 3], ["", "f", "", "r", ""])
+    # 4/5 -> rescan fronts (3, still wrong) -> rescan backs (3) -> match -> accept
+    s, calls = _run_batch(tmp_path, monkeypatch, [4, 5, 3, 3], ["", "f", "", "r", "", ""])
     assert calls == [4, 5, 3, 3] and len(s.pages) == 6
 
 
-def test_mismatch_discard_and_keep(tmp_path, monkeypatch):
-    s, calls = _run_batch(tmp_path / "a", monkeypatch, [4, 5], ["", "d"])
+def test_discard_and_keep(tmp_path, monkeypatch):
+    s, _ = _run_batch(tmp_path / "a", monkeypatch, [4, 5], ["", "d"])
     assert not s.pages
-    s, calls = _run_batch(tmp_path / "b", monkeypatch, [4, 5], ["", "k"])
+    s, _ = _run_batch(tmp_path / "b", monkeypatch, [4, 5], ["", "k"])
     assert len(s.pages) == 9
+    s, _ = _run_batch(tmp_path / "c", monkeypatch, [4], ["d"])  # discard right after the fronts
+    assert not s.pages

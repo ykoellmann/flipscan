@@ -52,9 +52,9 @@ def _report_empty(scan, what: str) -> None:
 
 
 def _adf_batch(cfg, session, scan) -> None:
-    """One ADF batch: fronts, flip, backs. On a count mismatch either side can be
-    rescanned on its own; the other side is kept, so a fixed rescan can complete
-    the pair."""
+    """One ADF batch: fronts, flip, backs. Every step can be redone: fronts after
+    scanning them, fronts or backs after the backs are in. The other side is kept
+    (so a fixed rescan can complete the pair)."""
     dirs = []
 
     def fresh():
@@ -62,8 +62,14 @@ def _adf_batch(cfg, session, scan) -> None:
         dirs.append(d)
         return d
 
-    def drop(d):
-        shutil.rmtree(d, ignore_errors=True)
+    def rescan(old, what):
+        shutil.rmtree(old, ignore_errors=True)
+        d = fresh()
+        files = scan.scan_adf_fronts(cfg, d)
+        print(f"  {len(files)} {what} side(s).")
+        if not files and scan.last_error:
+            print(f"  scanimage: {scan.last_error}")
+        return d, files
 
     try:
         ftmp = fresh()
@@ -77,9 +83,22 @@ def _adf_batch(cfg, session, scan) -> None:
             print(f"  ! Scan was interrupted: {why}.")
             if _ask("    [Enter] discard this batch and start over  [k] keep the pages so far > ") != "k":
                 return
-        if _ask("Flip the stack and reload -> [Enter] scan back sides  [n] single-sided > ") == "n":
-            scan.add_adf_batch(cfg, session, fronts, [])
-            return
+        while True:
+            ans = _ask("Flip the stack and reload -> [Enter] scan back sides  [r] rescan fronts  "
+                       "[n] single-sided  [d] discard > ")
+            if ans == "n":
+                scan.add_adf_batch(cfg, session, fronts, [])
+                return
+            if ans == "d":
+                return
+            if ans != "r":
+                break
+            input("Put the front sides back into the feeder, then press Enter... ")
+            if not _ready(cfg, scan):
+                return
+            ftmp, fronts = rescan(ftmp, "front")
+            if not fronts:
+                return
         if not _ready(cfg, scan):
             return
         btmp = fresh()
@@ -87,36 +106,36 @@ def _adf_batch(cfg, session, scan) -> None:
         print(f"  {len(backs)} back side(s).")
         if not backs and scan.last_error:
             print(f"  scanimage: {scan.last_error}")
-        while len(backs) != len(fronts):
-            ans = _ask(f"Count mismatch ({len(fronts)} fronts vs {len(backs)} backs). "
-                       "[r] rescan backs  [f] rescan fronts  [k] keep anyway  [d] discard batch > ")
-            if ans == "k":
-                break
+        while True:
+            if len(backs) == len(fronts):
+                ans = _ask(f"{len(fronts)} fronts + {len(backs)} backs -> [Enter] accept  "
+                           "[r] rescan backs  [f] rescan fronts  [d] discard > ")
+                if ans == "":
+                    break
+            else:
+                ans = _ask(f"Count mismatch ({len(fronts)} fronts vs {len(backs)} backs). "
+                           "[r] rescan backs  [f] rescan fronts  [k] keep anyway  [d] discard > ")
+                if ans == "k":
+                    break
             if ans == "d":
                 return
-            if ans == "f":  # keep the backs, replace the fronts
+            if ans == "f":
                 input("Put the front sides back into the feeder, then press Enter... ")
                 if not _ready(cfg, scan):
                     return
-                drop(ftmp)
-                ftmp = fresh()
-                fronts = scan.scan_adf_fronts(cfg, ftmp)
-                print(f"  {len(fronts)} front side(s) (keeping {len(backs)} back side(s)).")
-            else:  # keep the fronts, replace the backs
+                ftmp, fronts = rescan(ftmp, "front")
+                if not fronts:
+                    return
+            elif ans == "r":
                 input("Reload the back sides, then press Enter... ")
                 if not _ready(cfg, scan):
                     return
-                drop(btmp)
-                btmp = fresh()
-                backs = scan.scan_adf_fronts(cfg, btmp)
-                print(f"  {len(backs)} back side(s) (keeping {len(fronts)} front side(s)).")
-            if not fronts:
-                return
+                btmp, backs = rescan(btmp, "back")
         scan.add_adf_batch(cfg, session, fronts, backs)
         print("  Batch added.")
     finally:
         for d in dirs:
-            drop(d)
+            shutil.rmtree(d, ignore_errors=True)
 
 
 def cmd_scan(cfg, args):
