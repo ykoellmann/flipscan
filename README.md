@@ -22,7 +22,7 @@ Optional: `tesseract` (+ `deu`/`eng` data) for page-number detection.
     flipscan sessions           # list sessions;  --session NAME selects one
 
 Review keys: `←/→` navigate, `c` cut before sheet, `x` delete, `r` rotate, `u` undo,
-`n` name document, `R` rotate all back sides by 180° (fixes a wrong flip direction without rescanning), `B` delete suggested blanks, `C` accept suggested cuts, `space` zoom.
+`Enter` grab a page and move it with `←/→` (Enter/Esc to drop; drag & drop works too), `n` name document, `R` rotate all back sides by 180° (fixes a wrong flip direction without rescanning), `B` delete suggested blanks, `C` accept suggested cuts, `space` zoom.
 Blank pages and OCR cuts are only *suggestions*, never applied automatically. A page is
 suggested as blank when at least `blank_threshold` (default 98%) of its inner area (10% margin
 ignored, so header/footer-only pages are kept) is empty paper. Sessions can be deleted in the UI (🗑).

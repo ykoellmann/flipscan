@@ -272,3 +272,20 @@ def test_ready_waits_until_scanner_recovers(monkeypatch, capsys):
     monkeypatch.setattr(scan, "scanner_status", lambda cfg: scan.parse_status(JAM_XML))
     monkeypatch.setattr(builtins, "input", lambda *_: "q")
     assert cli._ready(Config(), scan) is False
+
+
+def test_move_pages(tmp_path):
+    cfg = Config(sessions_dir=str(tmp_path))
+    s = Session.create(tmp_path)
+    for i in range(4):
+        s.add_page(make_img(tmp_path / f"{i}.jpg", text=False), "Flatbed", s.new_sheet(), "front")
+    c = create_app(cfg, s).test_client()
+    ids = lambda r: [p["id"] for p in r["pages"]]
+    assert ids(c.post("/api/move", json={"id": 1, "to": 2}).get_json()) == [2, 3, 1, 4]
+    assert ids(c.post("/api/move", json={"id": 4, "to": 0}).get_json()) == [4, 2, 3, 1]
+    assert ids(c.post("/api/move", json={"id": 4, "to": 99}).get_json()) == [2, 3, 1, 4]  # clamped
+    assert ids(c.post("/api/undo", json={}).get_json()) == [4, 2, 3, 1]
+    assert [p["id"] for p in Session(s.root).pages] == [4, 2, 3, 1]  # persisted
+    # export follows the new order
+    from flipscan.export import export_pdfs
+    assert len(export_pdfs(Session(s.root))) == 1

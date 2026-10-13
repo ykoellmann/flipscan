@@ -180,6 +180,17 @@ class Session:
                             p[k] = v
             self.save()
 
+    def move(self, page_id: int, to_index: int) -> None:
+        """Put the page at position `to_index` (its final index in the list)."""
+        with self.lock:
+            idx = next((i for i, p in enumerate(self.pages) if p["id"] == page_id), None)
+            if idx is None:
+                return
+            self._snapshot()
+            page = self.pages.pop(idx)
+            self.pages.insert(max(0, min(to_index, len(self.pages))), page)
+            self.save()
+
     def undo(self) -> bool:
         with self.lock:
             if not self.undo_stack:

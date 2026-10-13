@@ -1,4 +1,4 @@
-let S = null, sel = 0;
+let S = null, sel = 0, grab = false, queue = Promise.resolve();
 const COLORS = ["#4fc3f7","#aed581","#ffb74d","#ba68c8","#f06292","#4db6ac","#fff176"];
 const $ = s => document.querySelector(s);
 
@@ -34,6 +34,17 @@ function render() {
       pe.innerHTML = `<img src="/thumbs/${p.file}" style="transform:rotate(${p.rotation}deg)">`
         + `<span class="tag">${p.side === "back" ? "B" : "F"}${p.blank_suggested ? " blank?" : ""}${p.page_of ? ` ${p.page_of[0]}/${p.page_of[1]}` : ""}</span>`;
       pe.onclick = () => { sel = S.pages.findIndex(q => q.id === p.id); render(); };
+      if (grab && S.pages[sel] && S.pages[sel].id === p.id) pe.classList.add("grab");
+      pe.draggable = true;
+      pe.ondragstart = e => { e.dataTransfer.setData("text/plain", String(p.id)); e.dataTransfer.effectAllowed = "move"; pe.classList.add("dragging"); };
+      pe.ondragend = () => pe.classList.remove("dragging");
+      pe.ondragover = e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; pe.classList.add("dropt"); };
+      pe.ondragleave = () => pe.classList.remove("dropt");
+      pe.ondrop = async e => {
+        e.preventDefault(); pe.classList.remove("dropt");
+        const id = parseInt(e.dataTransfer.getData("text/plain"));
+        if (id !== p.id) await moveTo(id, S.pages.findIndex(q => q.id === p.id));
+      };
       el.appendChild(pe);
     });
     strip.appendChild(el);
@@ -75,6 +86,12 @@ async function loadSessions() {
   });
 }
 
+async function moveTo(id, to) {
+  S = await api("/api/move", {id, to});
+  sel = S.pages.findIndex(q => q.id === id);
+  render();
+}
+
 async function update(ids, fields) { S = await api("/api/update", {ids, ...fields}); render(); }
 
 document.addEventListener("keydown", async e => {
@@ -82,8 +99,18 @@ document.addEventListener("keydown", async e => {
   const p = S.pages[sel];
   if ($("#zoom").hidden === false && e.key !== " ") { $("#zoom").hidden = true; return; }
   switch (e.key) {
-    case "ArrowRight": sel = Math.min(sel + 1, S.pages.length - 1); render(); break;
-    case "ArrowLeft": sel = Math.max(sel - 1, 0); render(); break;
+    case "Enter": grab = !grab; render(); break;
+    case "Escape": grab = false; render(); break;
+    case "ArrowRight": case "ArrowLeft": {
+      const d = e.key === "ArrowRight" ? 1 : -1;
+      if (!grab) { sel = Math.max(0, Math.min(sel + d, S.pages.length - 1)); render(); break; }
+      // moves are queued so fast key repeat applies every step in order
+      const id = p.id;
+      queue = queue.then(async () => {
+        const i = S.pages.findIndex(q => q.id === id), to = i + d;
+        if (i >= 0 && to >= 0 && to < S.pages.length) await moveTo(id, to);
+      });
+      break; }
     case "c": {
       // cut belongs to the sheet's first page so front and back stay together
       const first = S.pages.find(q => q.sheet === p.sheet);

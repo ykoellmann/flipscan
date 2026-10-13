@@ -93,6 +93,12 @@ def create_app(cfg: Config, session: Session) -> Flask:
                      rotate_by=int(body.get("rotate_by", 0)), **fields)
         return jsonify(state())
 
+    @app.post("/api/move")
+    def move():
+        body = request.get_json(force=True)
+        cur().move(int(body["id"]), int(body["to"]))
+        return jsonify(state())
+
     @app.post("/api/undo")
     def undo():
         cur().undo()
