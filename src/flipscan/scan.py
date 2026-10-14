@@ -1,5 +1,6 @@
 """Scanning: wraps scanimage, writes raw pages into a Session."""
 import re
+import signal
 import subprocess
 import tempfile
 import urllib.request
@@ -10,6 +11,20 @@ from PIL import Image
 
 from .config import Config
 from .session import Session
+
+
+class DeferInterrupt:
+    """Context manager: Ctrl+C during a scan only sets `hit` instead of raising, so
+    scanimage is never killed halfway (a cancelled job leaves the Canon stuck)."""
+
+    def __enter__(self):
+        self.hit = False
+        self._old = signal.signal(signal.SIGINT, lambda *_: setattr(self, "hit", True))
+        return self
+
+    def __exit__(self, *exc):
+        signal.signal(signal.SIGINT, self._old)
+        return False
 
 
 last_error = ""  # last stderr line of the most recent scanimage call
@@ -76,11 +91,12 @@ def _scanimage(cfg: Config, source: str, outdir: Path, batch: bool) -> list[Path
     if batch:
         cmd += [f"--batch={outdir}/p_%03d.{ext}", "--batch-start=1"]
         # exit code is non-zero once the feeder runs empty -> ignore
-        res = subprocess.run(cmd, stderr=subprocess.PIPE, text=True)
+        res = subprocess.run(cmd, stderr=subprocess.PIPE, text=True, start_new_session=True)
     else:
         out = outdir / f"p_001.{ext}"
         with open(out, "wb") as f:
-            res = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, text=True)
+            res = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, text=True,
+                                 start_new_session=True)  # terminal Ctrl+C must not reach scanimage
         if out.stat().st_size == 0:
             out.unlink()
     global last_error

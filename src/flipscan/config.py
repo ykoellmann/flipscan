@@ -24,6 +24,7 @@ class Config:
     page_height_mm: int = 297
     scan_format: str = "jpeg"
     back_rotation: int = 0
+    timer_interval: int = 10       # seconds between flatbed timer scans
     blank_threshold: float = 0.98  # share of empty paper needed to suggest 'blank'
     sessions_dir: str = "~/Scans/sessions"
     upload: Upload = field(default_factory=Upload)
@@ -42,6 +43,8 @@ def _validate(cfg: Config) -> None:
         raise ConfigError(f"config: scan_format must be jpeg|png|tiff, got {cfg.scan_format!r}")
     if cfg.back_rotation not in (0, 90, 180, 270):
         raise ConfigError("config: back_rotation must be 0, 90, 180 or 270")
+    if cfg.timer_interval < 1:
+        raise ConfigError("config: timer_interval must be >= 1")
     if not 0 < cfg.blank_threshold <= 1:
         raise ConfigError("config: blank_threshold must be in (0, 1]")
     if cfg.upload.backend not in ("scp", "folder", "paperless"):

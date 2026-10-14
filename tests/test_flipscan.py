@@ -360,3 +360,56 @@ def test_discard_and_keep(tmp_path, monkeypatch):
     assert len(s.pages) == 9
     s, _ = _run_batch(tmp_path / "c", monkeypatch, [4], ["d"])  # discard right after the fronts
     assert not s.pages
+
+
+def test_timer_scan_flow(tmp_path, monkeypatch, capsys):
+    from flipscan import cli, scan
+    cfg = Config(scanner="x", sessions_dir=str(tmp_path / "s"), timer_interval=1)
+    s = Session.create(cfg.sessions_path)
+    n = {"scans": 0}
+
+    def fake_flat(cfg_, outdir):
+        n["scans"] += 1
+        f = outdir / "p_001.jpg"
+        make_img(f, text=False)
+        return f
+
+    waits = iter(["now", "now", "stop"])
+    monkeypatch.setattr(scan, "scan_flatbed_page", fake_flat)
+    monkeypatch.setattr(scan, "scanner_status", lambda c: {"state": "Idle", "adf": "ScannerAdfLoaded"})
+    monkeypatch.setattr(cli, "_wait", lambda sec: next(waits))
+    cli._timer_scan(cfg, s, scan, 1)
+    assert n["scans"] == 3 and len(s.pages) == 3
+    assert len({p["batch"] for p in s.pages}) == 1 and all(p["source"] == "Flatbed" for p in s.pages)
+    assert "finished: 3 page(s)" in capsys.readouterr().out
+
+
+def test_timer_scan_stops_after_repeated_failures(tmp_path, monkeypatch):
+    from flipscan import cli, scan
+    cfg = Config(scanner="x", sessions_dir=str(tmp_path / "s"))
+    s = Session.create(cfg.sessions_path)
+    calls = []
+    monkeypatch.setattr(scan, "scan_flatbed_page", lambda c, d: calls.append(1))
+    monkeypatch.setattr(scan, "scanner_status", lambda c: {"state": "Idle", "adf": "ScannerAdfLoaded"})
+    monkeypatch.setattr(cli, "_wait", lambda sec: "now")
+    cli._timer_scan(cfg, s, scan, 1)
+    assert len(calls) == 3 and not s.pages
+
+
+def test_defer_interrupt_does_not_raise():
+    import os, signal
+    from flipscan import scan
+    with scan.DeferInterrupt() as intr:
+        os.kill(os.getpid(), signal.SIGINT)
+        assert intr.hit
+    assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
+
+
+def test_wait_countdown_stops_on_q(monkeypatch):
+    import io
+    from flipscan import cli
+    monkeypatch.setattr(cli.select, "select", lambda r, w, x, t: (r, [], []))
+    monkeypatch.setattr(cli.sys, "stdin", io.StringIO("q\n"))
+    assert cli._wait(5) == "stop"
+    monkeypatch.setattr(cli.sys, "stdin", io.StringIO("\n"))
+    assert cli._wait(5) == "now"

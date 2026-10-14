@@ -16,6 +16,7 @@ Optional: `tesseract` (+ `deu`/`eng` data) for page-number detection.
 
 ## Workflow
     flipscan scan [--new]       # add batches (ADF / flatbed) to the latest session
+    # in the scan prompt: [t] = flatbed timer mode, scans every `timer_interval` seconds (--interval)
     flipscan review             # http://127.0.0.1:5000
     flipscan ocr                # optional: suggest cuts from "Seite 1 von N"
     flipscan upload [--export]  # retry failed uploads

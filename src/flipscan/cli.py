@@ -1,4 +1,5 @@
 import argparse
+import select
 from importlib import resources
 import shutil
 import sys
@@ -49,6 +50,50 @@ def _ready(cfg, scan) -> bool:
 
 def _report_empty(scan, what: str) -> None:
     print(f"  0 {what}." + (f" scanimage: {scan.last_error}" if scan.last_error else ""))
+
+
+def _wait(seconds: int) -> str:
+    """Countdown between timer scans. Enter = scan now, q + Enter = stop."""
+    for left in range(seconds, 0, -1):
+        print(f"\r  next scan in {left:2d}s  (Enter = now, q = stop)  ", end="", flush=True)
+        ready, _, _ = select.select([sys.stdin], [], [], 1)
+        if ready:
+            line = sys.stdin.readline()
+            print()
+            return "stop" if line == "" or line.strip().lower() == "q" else "now"
+    print()
+    return "now"
+
+
+def _timer_scan(cfg, session, scan, interval: int) -> None:
+    """Flatbed timer mode: scan, wait `interval` seconds (swap the page), repeat."""
+    batch = session.next_batch()
+    saved = failures = 0
+    print(f"Timer scan every {interval}s: the first page is scanned now. "
+          "Enter = scan immediately, q = stop (Ctrl+C also stops after the running scan).")
+    with scan.DeferInterrupt() as intr:
+        while not intr.hit:
+            if not _ready(cfg, scan):
+                break
+            tmp = scan.tmpdir()
+            try:
+                img = scan.scan_flatbed_page(cfg, tmp)
+                if img is None:
+                    failures += 1
+                    _report_empty(scan, "pages scanned")
+                    if failures >= 3:
+                        print("  Stopping after 3 failed scans in a row.")
+                        break
+                else:
+                    failures = 0
+                    scan.add_flatbed_page(session, img, batch)
+                    saved += 1
+                    print(f"  Page {saved} saved ({len(session.pages)} in session)")
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            if intr.hit or _wait(interval) == "stop":
+                break
+    print(f"Timer scan finished: {saved} page(s).")
 
 
 def _adf_batch(cfg, session, scan) -> None:
@@ -146,13 +191,18 @@ def cmd_scan(cfg, args):
         cfg.back_rotation = args.back_rotation
     if args.dpi:
         cfg.dpi = args.dpi
+    if args.interval:
+        cfg.timer_interval = args.interval
     if not cfg.scanner:
         sys.exit("No scanner configured (config.toml, see config.example.toml).")
     session = _get_session(cfg, args.new, args.session)
     while True:
-        mode = _ask("Load paper -> [Enter] scan ADF  [f] scan flatbed  [q] quit > ", "a")
+        mode = _ask("Load paper -> [Enter] scan ADF  [f] scan flatbed  [t] flatbed timer  [q] quit > ", "a")
         if mode == "q":
             break
+        if mode == "t":
+            _timer_scan(cfg, session, scan, cfg.timer_interval)
+            continue
         if not _ready(cfg, scan):
             break
         tmp = scan.tmpdir()
@@ -232,6 +282,7 @@ def main():
     p.add_argument("--back-rotation", type=int, choices=(0, 90, 180, 270),
                    help="rotation of back sides (config: back_rotation)")
     p.add_argument("--dpi", type=int, help="resolution (config: dpi)")
+    p.add_argument("--interval", type=int, help="seconds between flatbed timer scans (config: timer_interval)")
     p.set_defaults(fn=cmd_scan)
     p = sub.add_parser("review", help="start the review UI")
     p.add_argument("--port", type=int, default=5000)
