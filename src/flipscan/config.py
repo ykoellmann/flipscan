@@ -24,7 +24,7 @@ class Config:
     page_height_mm: int = 297
     scan_format: str = "jpeg"
     back_rotation: int = 0
-    timer_interval: int = 10       # seconds between flatbed timer scans
+    timer_interval: int = 5        # seconds between flatbed timer scans
     blank_threshold: float = 0.98  # share of empty paper needed to suggest 'blank'
     sessions_dir: str = "~/Scans/sessions"
     upload: Upload = field(default_factory=Upload)

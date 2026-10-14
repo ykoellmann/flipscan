@@ -10,7 +10,7 @@ scan_format = "jpeg"              # jpeg | png | tiff
 # stack; override per run: flipscan scan --back-rotation 180
 back_rotation = 0
 # Flatbed timer mode (`t` in `flipscan scan`): seconds between scans, to swap pages.
-timer_interval = 10
+timer_interval = 5
 # A page is suggested as blank when at least this share of its inner area is empty paper.
 blank_threshold = 0.98
 sessions_dir = "~/Scans/sessions"
